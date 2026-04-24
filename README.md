@@ -56,7 +56,7 @@ result <- run_caspex(
   out_dir          = "caspex_output",
   coverage_correct = TRUE,                   # coverage-aware per-motif scoring
   cov_floor        = 0.05,
-  edge_guard_frac  = 0.15
+  edge_guard_frac  = 0.25
 )
 
 # Optional supplementary analyses (one-pagers, permutation null,
@@ -172,7 +172,7 @@ s(x) = Σ_r w_r⁺ · G(x − pos_r; σ)       (positive-part region-weighted si
 C(x) = Σ_r        G(x − pos_r; σ)       (unweighted — every gRNA contributes)
 ```
 
-with `σ = 250 bp` (default `kernel_sigma`), the APEX labeling radius.
+with `σ = 300 bp` (default `kernel_sigma`), the APEX labeling radius.
 
 **Candidate positions.** Either JASPAR / HOCOMOCO motif hits for that TF (preferred) or local maxima of the raw signal `s(x)` inside the in-support mask (fallback for TFs without a PWM).
 
@@ -186,14 +186,14 @@ and keep `β_k > min_weight_frac · max_k β_k` (default `min_weight_frac = 0.15
 
 *What β represents.* A per-unit-labeling occupancy rate: the effect size normalized by how much labeling opportunity was deposited at that position. In a 2-gRNA overlap both s and C roughly double so β returns the individual-region weight; in a gRNA-poor tail both approach zero and the `cov_floor` prevents unbounded amplification of tail noise.
 
-**Edge guard.** The `cov_floor` clamp alone is not enough to stop the west/east edges from sprouting spurious calls. Just inside the clamp boundary — where `C(x)` is *barely above* `cov_floor · max(C)` — any residual kernel tail of `s(x)` gets divided by a tiny denominator, and the resulting inflated `β(x)` can form a contiguous above-threshold zone that touches the grid edge. The fix is a second, stricter threshold `edge_guard_frac` (default `0.15` = 3× default `cov_floor`) that defines the **in-support region** for β:
+**Edge guard.** The `cov_floor` clamp alone is not enough to stop the west/east edges from sprouting spurious calls. Just inside the clamp boundary — where `C(x)` is *barely above* `cov_floor · max(C)` — any residual kernel tail of `s(x)` gets divided by a tiny denominator, and the resulting inflated `β(x)` can form a contiguous above-threshold zone that touches the grid edge. The fix is a second, stricter threshold `edge_guard_frac` (default `0.25` = 5× default `cov_floor`) that defines the **in-support region** for β:
 
 ```
 support_mask = C(x) > max(cov_floor, edge_guard_frac) · max(C)
 β(x)[!support_mask] = 0     # zone / peak detection only inside the mask
 ```
 
-Both the motif-based zone detection and the motif-less peak-finding branch respect this mask; the motif-less branch additionally peak-finds on the raw `s(x)` (not `β(x)`) so edge ramping cannot create phantom local maxima there. Raise `edge_guard_frac` toward `0.20`–`0.25` on sparsely-tiled genes if west-edge calls still appear; lower it toward `cov_floor` on densely-tiled regions where you trust β further into the transition band.
+Both the motif-based zone detection and the motif-less peak-finding branch respect this mask; the motif-less branch additionally peak-finds on the raw `s(x)` (not `β(x)`) so edge ramping cannot create phantom local maxima there. Raise `edge_guard_frac` toward `0.30`–`0.35` on sparsely-tiled genes if west-edge calls still appear; lower it toward `cov_floor` on densely-tiled regions where you trust β further into the transition band.
 
 **Diagnostic columns.** `binding_events.csv` carries `distance_to_nearest_grna` and `local_coverage = C(event_pos)`. A high `β_k` with low `local_coverage` is a **coverage-rescued** call — a motif that a naive smoothed-signal fit would have clipped because the raw signal at its position is suppressed by labeling geometry. Inspect those first when validating results.
 
@@ -291,7 +291,7 @@ Motif ticks live in a **sub-lane below** the ribbon — not on top, not spanning
 │    :         :                         │ ← shaded strip (floats below
 │    ||  ||    ||   motif ticks          │    the lowest lollipop)
 │    ●           ●  predicted events     │ ← called-peak track
-│    +120 bp    −800 bp  (labels)        │
+│    +120       −800    (labels)         │
 ```
 
 The called-peak strip is anchored to `min(0, lfc) − 0.06·sig_max`, so depletion lollipops (negative lfc) are never buried under the motif/event lane. When all lfc ≥ 0 this collapses back to "strip sits directly below zero". Dotted connectors run from each predicted event up to the signal value at that x, so a reviewer sees which signal peak each call explains. The dashed grey `C(x)` overlay (scaled to the signal max) shows at a glance where labeling opportunity was strong versus where a call depended on the coverage correction.
@@ -319,7 +319,7 @@ Only motifs with `β_k > 0.15 · max(β)` become bubbles. All the other PWM hits
 | `n_shared` | 10 | shared-focal TFs significant in ≥ 2 regions (deck 11/12) |
 | `n_specific` | 10 | region-specific TFs per region (deck 08/09) |
 | `motif_thresh` | 0.80 | PWM score as fraction of max (JASPAR/HOCOMOCO) |
-| `kernel_sigma` | 250 | APEX labeling radius (bp) |
+| `kernel_sigma` | 300 | APEX labeling radius (bp) |
 | `min_weight_frac` | 0.15 | minimum normalised weight to keep a peak |
 | `min_peak_dist` | 150 | bp between local maxima in the motif-less fallback |
 | `merge_dist` | 100 | merge adjacent kept peaks within this distance |
@@ -327,7 +327,7 @@ Only motifs with `β_k > 0.15 · max(β)` become bubbles. All the other PWM hits
 | `signal_weight` | `NULL` | override `weight_mode` for the signal-building step only (backward-compat alias) |
 | `coverage_correct` | `TRUE` | enable coverage-aware per-motif scoring. Leave at `TRUE` for the documented behaviour; the code retains an internal `FALSE` branch for comparison experiments but it is not packaged here. |
 | `cov_floor` | 0.05 | relative floor on the denominator; caps inverse-coverage amplification at ~1/cov_floor |
-| `edge_guard_frac` | 0.15 | fraction-of-max-coverage floor for the in-support mask. β is trusted only where `c_grid(x) > edge_guard_frac · max(c_grid)`, so zones and peaks cannot form in the low-denominator transition band just inside the `cov_floor` clamp. Must be ≥ `cov_floor`; raise if you still see west-edge calls on sparsely-tiled genes. |
+| `edge_guard_frac` | 0.25 | fraction-of-max-coverage floor for the in-support mask. β is trusted only where `c_grid(x) > edge_guard_frac · max(c_grid)`, so zones and peaks cannot form in the low-denominator transition band just inside the `cov_floor` clamp. Must be ≥ `cov_floor`; raise if you still see west-edge calls on sparsely-tiled genes. |
 | `tfs_only` | `TRUE` | restrict spatial model to `TFDatabase == "exist"` |
 
 ---
@@ -367,7 +367,7 @@ $weight_source    # what was *actually* used — "moderated t from input" or
                   #   "signed z-score (derived from p-value; no `t` column in input)"
 $coverage_correct # TRUE for the packaged pipeline
 $cov_floor        # 0.05 by default
-$edge_guard_frac  # 0.15 by default
+$edge_guard_frac  # 0.25 by default
 $plots            # named list of ggplot objects
   $grna, $track, $heat, $gc, $motif,
   $common, $common_motif,
@@ -383,8 +383,8 @@ At the end of every run, a structured summary block is also printed to the conso
 --- Run summary --------------------------------------------------
  Weight mode      : mod_t
  Weight source    : signed z-score (derived from p-value; no `t` column in input)
- Kernel sigma (bp): 250
- Binding path     : coverage-normalized per-motif β=s/C (cov_floor=0.05, edge_guard_frac=0.15)
+ Kernel sigma (bp): 300
+ Binding path     : coverage-normalized per-motif β=s/C (cov_floor=0.05, edge_guard_frac=0.25)
  Spatial TFs      : 139
  Binding events   : 88 (40 TFs)
 ------------------------------------------------------------------
@@ -448,7 +448,7 @@ result <- run_caspex_hocomoco(
   hocomoco_species = "human",        # "human" (default) or "mouse"
   coverage_correct = TRUE,
   cov_floor        = 0.05,
-  edge_guard_frac  = 0.15
+  edge_guard_frac  = 0.25
 )
 ```
 
@@ -498,7 +498,7 @@ result <- run_caspex(gene = "gene_name",
                      data_files = inputs$data_files,
                      coverage_correct = TRUE,
                      cov_floor        = 0.05,
-                     edge_guard_frac  = 0.15)
+                     edge_guard_frac  = 0.25)
 
 extras <- run_caspex_extras(result, out_dir = "caspex_output/extras",
                              n_perm = 500)
