@@ -1,0 +1,25 @@
+# CasPEX input manifest
+# -----------------------------------------------------------------------------
+# One row per tiled gRNA region. Columns (tab-separated):
+#   region     Region label used throughout the pipeline (R1, R2, ...).
+#              Must be unique. Case-sensitive.
+#   sequence   Protospacer (17-23 bp). PAM (NGG / CCN) is optional; the
+#              loader strips it. Use NA (uppercase) if a region has no
+#              matched gRNA sequence — the pipeline will still use its
+#              logFC data but plot no cut-site tick for it.
+#   data_file  Filename of the logFC / differential-expression table for
+#              that region, RELATIVE to this inputs/ directory. The file
+#              must be tab-delimited with a header and must contain
+#              columns identifiable as name / logFC / P.Value (plus the
+#              optional moderated-t column `t` and the `TFDatabase` flag).
+#
+# Lines starting with '#' are comments. Blank lines are ignored.
+# -----------------------------------------------------------------------------
+region	sequence	data_file
+R1	GGGCTCACCCACCGCCTGCG	Region1.txt
+R2	CACTGCTGTCCCGCCCACGG	Region2.txt
+R3	AAGTTGTTGAGGTGAGCAGC	Region3.txt
+R4	TTTAAGTGACGTGTTAACAA	Region4.txt
+R5	TACTGCTATTCAGGAAGCTA	Region5.txt
+R6	TCATAAAAGCAACACTACAG	Region6.txt
+R7	GGCTAACTTAGACATGTAGT	Region7.txt
